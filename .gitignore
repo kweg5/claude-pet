@@ -1,0 +1,7 @@
+.pet_state
+.pet_hook_debug.log
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+Thumbs.db
