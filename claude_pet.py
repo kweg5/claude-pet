@@ -108,6 +108,7 @@ class ClaudePet:
         self.auto_move = True
         self.last_state = ""
         self.locked_by_hook = False
+        self.walk_timer = 0  # 控制随机走停的计数器
 
         # 气泡状态
         self.bubble_visible = False
@@ -262,6 +263,7 @@ class ClaudePet:
             self.root.after(1500, self.restore_idle)
 
     def on_double_click(self, event):
+        focus_claude_terminal()
         self.switch_anim("wave")
 
     def on_right_click(self, event):
@@ -272,21 +274,47 @@ class ClaudePet:
             self.current_anim = "idle"
             self.frame_idx = 0
             self.auto_move = True
+            self.walk_timer = random.randint(15, 50)
 
     def auto_walk(self):
         if not self.auto_move or self.locked_by_hook:
             return
         sw = self.root.winfo_screenwidth()
+
+        # 随机走停逻辑
+        self.walk_timer -= 1
+        if self.walk_timer <= 0:
+            # 到达随机间隔，重新决定行为
+            r = random.random()
+            if r < 0.35:
+                # 停下来 idle 一会儿
+                self.walk_timer = random.randint(30, 80)
+                self.current_anim = "idle"
+                self.root.geometry(f"+{self.x}+{self.y}")
+                return
+            elif r < 0.55:
+                # 随机掉头
+                self.facing_right = not self.facing_right
+            self.walk_timer = random.randint(20, 60)
+
+        # 正在 idle 停顿中，不移动
+        if self.current_anim == "idle":
+            return
+
+        # 移动
         if self.facing_right:
             self.x += WALK_SPEED
+            self.current_anim = "run_r"
             if self.x + self.canvas_w >= sw - 10:
                 self.facing_right = False
                 self.current_anim = "run_l"
         else:
             self.x -= WALK_SPEED
+            self.current_anim = "run_l"
             if self.x <= 10:
                 self.facing_right = True
                 self.current_anim = "run_r"
+
         self.root.geometry(f"+{self.x}+{self.y}")
 
     def animate(self):
@@ -319,6 +347,7 @@ class ClaudePet:
                         self.root.after(800, self.restore_idle)
                     else:
                         self.current_anim = "run_r" if self.facing_right else "run_l"
+                        self.walk_timer = random.randint(20, 60)
                 elif anim in ("wave", "jump", "failed", "waiting", "review"):
                     self.current_anim = "idle"
                     self.auto_move = True
