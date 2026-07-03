@@ -88,7 +88,8 @@ class ClaudePet:
         self.root.attributes("-transparentcolor", "#010101")
         self.root.config(bg="#010101")
 
-        self.frames, self.fw, self.fh = load_frames(SPRITESHEET, SCALE)
+        self.current_scale = SCALE
+        self.frames, self.fw, self.fh = load_frames(SPRITESHEET, self.current_scale)
 
         # 画布固定大小：上方留气泡空间 + 精灵
         self.bubble_area_h = 60  # 气泡最大高度
@@ -128,6 +129,7 @@ class ClaudePet:
         self.canvas.bind("<ButtonRelease-1>", self.on_release)
         self.canvas.bind("<Double-Button-1>", self.on_double_click)
         self.canvas.bind("<Button-3>", self.on_right_click)
+        self.canvas.bind("<Control-MouseWheel>", self.on_zoom)
 
         # 右键菜单
         self.menu = tk.Menu(root, tearoff=0)
@@ -136,6 +138,11 @@ class ClaudePet:
         self.menu.add_command(label="🔍 审阅代码", command=lambda: self.switch_anim("review"))
         self.menu.add_command(label="⏳ 等待中", command=lambda: self.switch_anim("waiting"))
         self.menu.add_command(label="😵 失败了", command=lambda: self.switch_anim("failed"))
+        self.menu.add_separator()
+        self.menu.add_separator()
+        self.menu.add_command(label="🔍 放大", command=lambda: self.apply_zoom(0.1))
+        self.menu.add_command(label="🔎 缩小", command=lambda: self.apply_zoom(-0.1))
+        self.menu.add_command(label="📐 重置大小", command=lambda: self.set_zoom(SCALE))
         self.menu.add_separator()
         self.menu.add_command(label="❌ 退出", command=root.destroy)
 
@@ -206,11 +213,11 @@ class ClaudePet:
     def check_state(self):
         try:
             if os.path.exists(STATE_FILE):
-                mtime = os.path.getmtime(STATE_FILE)
-                if mtime != self.last_state:
-                    self.last_state = mtime
-                    with open(STATE_FILE, "r") as f:
-                        data = json.load(f)
+                with open(STATE_FILE, "r") as f:
+                    data = json.load(f)
+                ts = data.get("ts", 0)
+                if ts != self.last_state:
+                    self.last_state = ts
                     state = data.get("state", "idle")
                     message = data.get("message", "") or data.get("detail", "")
                     anim = STATE_TO_ANIM.get(state, "idle")
@@ -221,7 +228,7 @@ class ClaudePet:
                         if self.current_anim not in ("run_r", "run_l"):
                             self.current_anim = "idle"
                         if self.bubble_visible:
-                            self.schedule_bubble_hide()
+                            self.hide_bubble()
                     else:
                         self.locked_by_hook = True
                         self.auto_move = False
@@ -268,6 +275,42 @@ class ClaudePet:
 
     def on_right_click(self, event):
         self.menu.post(event.x_root, event.y_root)
+
+    def on_zoom(self, event):
+        """Ctrl+滚轮缩放宠物"""
+        delta = event.delta
+        if delta > 0:
+            new_scale = self.current_scale + 0.05
+        else:
+            new_scale = self.current_scale - 0.05
+        new_scale = max(0.25, min(2.0, new_scale))
+        if abs(new_scale - self.current_scale) < 0.001:
+            return
+        self.current_scale = round(new_scale, 2)
+        self.frames, self.fw, self.fh = load_frames(SPRITESHEET, self.current_scale)
+        self.canvas_w = max(self.fw, BUBBLE_MAX_W + BUBBLE_PAD * 2)
+        self.canvas_h = self.bubble_area_h + BUBBLE_TOP_MARGIN + self.fh
+        self.sprite_y0 = self.bubble_area_h + BUBBLE_TOP_MARGIN
+        self.canvas.config(width=self.canvas_w, height=self.canvas_h)
+        self.root.geometry(f"{self.canvas_w}x{self.canvas_h}+{self.x}+{self.y}")
+
+    def apply_zoom(self, delta):
+        """右键菜单缩放"""
+        new_scale = max(0.25, min(2.0, self.current_scale + delta))
+        self.set_zoom(new_scale)
+
+    def set_zoom(self, scale):
+        """设置指定缩放比例"""
+        scale = round(scale, 2)
+        if abs(scale - self.current_scale) < 0.001:
+            return
+        self.current_scale = scale
+        self.frames, self.fw, self.fh = load_frames(SPRITESHEET, self.current_scale)
+        self.canvas_w = max(self.fw, BUBBLE_MAX_W + BUBBLE_PAD * 2)
+        self.canvas_h = self.bubble_area_h + BUBBLE_TOP_MARGIN + self.fh
+        self.sprite_y0 = self.bubble_area_h + BUBBLE_TOP_MARGIN
+        self.canvas.config(width=self.canvas_w, height=self.canvas_h)
+        self.root.geometry(f"{self.canvas_w}x{self.canvas_h}+{self.x}+{self.y}")
 
     def restore_idle(self):
         if not self.locked_by_hook:

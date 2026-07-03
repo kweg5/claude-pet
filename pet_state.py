@@ -13,24 +13,24 @@ TOOL_ANIM = {
     "Agent": "running", "Workflow": "running",
 }
 
+TOOL_MSG = {
+    "Bash": "执行命令中…",
+    "PowerShell": "执行命令中…",
+    "Read": "读取文件中…",
+    "Write": "写入文件中…",
+    "Edit": "编辑文件中…",
+    "NotebookEdit": "编辑笔记本…",
+    "Grep": "搜索内容中…",
+    "Glob": "查找文件中…",
+    "WebFetch": "访问网页中…",
+    "WebSearch": "搜索网络中…",
+    "Agent": "思考中…",
+    "Workflow": "执行任务中…",
+}
+
 def get_message(tool, inp):
-    """从 tool_input 提取简要信息用于气泡显示"""
-    if not inp:
-        return ""
-    if tool in ("Bash", "PowerShell"):
-        cmd = inp.get("command", "")
-        return cmd[:40] + "..." if len(cmd) > 40 else cmd
-    if tool in ("Read",):
-        return inp.get("file_path", "").split("/")[-1].split("\\")[-1]
-    if tool in ("Write", "Edit"):
-        return inp.get("file_path", "").split("/")[-1].split("\\")[-1]
-    if tool in ("Grep", "Glob"):
-        return inp.get("pattern", "")[:30]
-    if tool == "WebFetch":
-        return inp.get("url", "")[:40]
-    if tool == "WebSearch":
-        return inp.get("query", "")[:30]
-    return tool
+    """返回中文气泡消息"""
+    return TOOL_MSG.get(tool, "处理中…")
 
 def load_allowed_patterns():
     """从 settings.json 读取已授权的 Bash 命令模式"""
@@ -48,8 +48,11 @@ def load_allowed_patterns():
     except:
         return []
 
-def needs_permission(tool_name, tool_input, allowed):
+def needs_permission(tool_name, tool_input, allowed, permission_mode=""):
     """判断工具是否需要权限确认"""
+    # acceptEdits/bypassPermissions 模式下，工具自动放行，不需要等待
+    if permission_mode in ("acceptEdits", "bypassPermissions"):
+        return False
     if tool_name not in TOOL_ANIM:
         return True
     if tool_name in ("Bash", "PowerShell"):
@@ -87,12 +90,11 @@ def main():
     tool_input = data.get("tool_input", {})
 
     if "PreToolUse" in hook_event:
+        permission_mode = data.get("permission_mode", "")
         allowed = load_allowed_patterns()
-        if needs_permission(tool_name, tool_input, allowed):
-            # 需要权限确认 → 感叹号
+        if needs_permission(tool_name, tool_input, allowed, permission_mode):
             write_state("waiting", tool_name, "❗")
         else:
-            # 正常执行 → 显示工具信息
             anim = TOOL_ANIM.get(tool_name, "waiting")
             msg = get_message(tool_name, tool_input)
             write_state(anim, tool_name, msg)
